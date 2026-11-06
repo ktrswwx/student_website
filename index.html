@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StudyFlow — персональний органайзер студента</title>
+<meta name="description" content="Розклад, завдання, фокус-таймер, картки та звички. Дані зберігаються у браузері.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310b981' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 10v6M2 10l10-5 10 5-10 5z'/><path d='M6 12v5c3 3 9 3 12 0v-5'/></svg>">
+<style>
+:root {
+  --bg: #f8fafc; --card: #ffffff; --muted-bg: #f1f5f9;
+  --border: #e2e8f0; --border-strong: #cbd5e1;
+  --text: #0f172a; --muted: #64748b;
+  --accent: #059669; --accent-fg: #ffffff;
+  --accent-soft: rgba(5, 150, 105, 0.12);
+  --danger: #dc2626;
+  --r: 8px;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+:root.dark {
+  --bg: #0b0f17; --card: #121824; --muted-bg: #1a2234;
+  --border: #1e293b; --border-strong: #334155;
+  --text: #f1f5f9; --muted: #94a3b8;
+  --accent: #10b981; --accent-fg: #ffffff;
+  --accent-soft: rgba(16, 185, 129, 0.16);
+  --danger: #ef4444;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--sans); background: var(--bg); color: var(--text);
+  font-size: 14px; line-height: 1.45;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input, select, textarea { font: inherit; color: inherit; }
+
+/* ---------- Каркас ---------- */
+.sidebar {
+  position: fixed; inset: 0 auto 0 0; width: 224px; z-index: 40;
+  border-right: 1px solid var(--border); background: var(--card);
+  display: none; flex-direction: column;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 18px 16px 14px; }
+.brand-mark {
+  width: 32px; height: 32px; border-radius: 6px;
+  background: var(--accent); color: var(--accent-fg);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.brand-name { font-size: 14px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+.brand-sub {
+  margin-top: 3px; font-family: var(--mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
+}
+.side-nav { flex: 1; padding: 4px 8px; display: flex; flex-direction: column; gap: 2px; }
+.nav-btn {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: var(--r); font-size: 13.5px; font-weight: 500;
+  color: var(--muted); text-align: left; width: 100%;
+}
+.nav-btn:hover { background: var(--muted-bg); color: var(--text); }
+.nav-btn.active { background: var(--accent); color: var(--accent-fg); }
+.nav-btn svg { flex-shrink: 0; }
+.side-foot { border-top: 1px solid var(--border); padding: 10px 12px 12px; }
+.side-clock-row { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; }
+.clock { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.m-header {
+  position: sticky; top: 0; z-index: 40; display: flex; align-items: center;
+  justify-content: space-between; gap: 8px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+}
+.m-brand { display: flex; align-items: center; gap: 9px; }
+.m-actions { display: flex; align-items: center; gap: 2px; }
+
+main { min-height: 100vh; padding-bottom: 84px; }
+.wrap { max-width: 920px; margin: 0 auto; padding: 20px 16px 24px; }
+footer.page {
+  margin-top: 28px; border-top: 1px solid var(--border); padding-top: 10px;
+  text-align: center; font-family: var(--mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);
+}
+.view { display: none; }
+.view.active { display: block; animation: fadein .2s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+.bottom-nav {
+  position: fixed; inset: auto 0 0 0; z-index: 40; display: grid; grid-template-columns: repeat(6, 1fr);
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(8px); padding-bottom: env(safe-area-inset-bottom);
+}
+.bottom-nav button {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 0 7px; font-size: 10px; font-weight: 500; color: var(--muted);
+}
+.bottom-nav button.active { color: var(--text); }
+@media (min-width: 900px) {
+  .sidebar { display: flex; }
+  .m-header, .bottom-nav { display: none; }
+  main { padding-bottom: 0; padding-left: 224px; }
+  .wrap { padding: 28px 32px 32px; }
+}
+
+/* ---------- Компоненти ---------- */
+h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.head-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.row-list > * + * { border-top: 1px solid var(--border); }
+.row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+  transition: background .12s;
+}
+.row:hover { background: color-mix(in srgb, var(--text) 3%, transparent); }
+.row:hover .row-actions { opacity: 1; }
+.row-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
+@media (hover: none) { .row-actions { opacity: 1; } }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: var(--r);
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg);
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.btn:hover { opacity: .88; }
+.btn.outline { background: transparent; color: var(--text); border-color: var(--border-strong); }
+.btn.outline:hover { background: var(--muted-bg); opacity: 1; }
+.btn.ghost { background: transparent; border: none; color: var(--muted); padding: 5px 7px; }
+.btn.ghost:hover { background: var(--muted-bg); color: var(--text); opacity: 1; }
+.btn.ghost.danger:hover { color: var(--danger); }
+.btn.sm { padding: 5px 10px; font-size: 12.5px; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--r); color: var(--muted);
+}
+.icon-btn:hover { background: var(--muted-bg); color: var(--text); }
+.icon-btn.danger:hover { color: var(--danger); }
+
+.input, .select, textarea.input {
+  width: 100%; padding: 7px 10px; border: 1px solid var(--border-strong);
+  border-radius: var(--r); background: var(--card); font-size: 13.5px; outline: none;
+}
+.input:focus, .select:focus, textarea.input:focus { border-color: var(--text); }
+.label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 5px; }
+.field { display: grid; gap: 4px; }
+
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r); padding: 2px; gap: 2px; }
+.seg button { padding: 4px 12px; border-radius: 4px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.seg button.active { background: var(--accent); color: var(--accent-fg); }
+
+.pill-day {
+  position: relative; flex-shrink: 0; padding: 7px 12px; border: 1px solid var(--border-strong);
+  border-radius: var(--r); font-size: 13px; font-weight: 500; color: var(--muted);
+}
+.pill-day.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.pill-day .cnt { font-family: var(--mono); font-size: 11px; opacity: .65; margin-left: 5px; }
+.pill-day .dot { position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.day-scroller { display: flex; gap: 6px; overflow-x: auto; padding: 2px 1px 6px; margin: 0 -1px; }
+.day-scroller::-webkit-scrollbar { height: 4px; }
+.day-scroller::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+
+.progress { height: 4px; background: var(--muted-bg); border-radius: 99px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s; }
+
+.kbd {
+  display: inline-block; padding: 1px 5px; border: 1px solid var(--border-strong);
+  border-bottom-width: 2px; border-radius: 4px; background: var(--muted-bg);
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; color: var(--muted);
+}
+
+.group-head {
+  padding: 5px 14px; font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
+  background: var(--muted-bg); border-bottom: 1px solid var(--border);
+}
+.group-head.danger { color: var(--danger); }
+
+.stat-strip { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card); }
+@media (min-width: 640px) { .stat-strip { grid-template-columns: repeat(4, 1fr); } }
+.stat-cell { padding: 14px; text-align: left; border: 0; }
+.stat-cell + .stat-cell { border-left: 1px solid var(--border); }
+.stat-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.stat-value { font-family: var(--mono); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.stat-value.danger { color: var(--danger); }
+.stat-note { font-size: 11.5px; color: var(--muted); }
+.stat-note.danger { color: var(--danger); font-weight: 600; }
+
+.quick-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-link {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px;
+  border: 1px solid var(--border-strong); border-radius: var(--r);
+  font-size: 13px; font-weight: 500;
+}
+.quick-link:hover { background: var(--muted-bg); }
+.quick-link svg { color: var(--muted); }
+
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.danger { color: var(--danger); }
+.capitalize { text-transform: capitalize; }
+.parity-badge {
+  display: inline-block; padding: 2px 7px; border: 1px solid var(--border-strong);
+  border-radius: 4px; font-family: var(--mono); font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.now-badge {
+  padding: 2px 7px; border: 1px solid var(--border-strong); border-radius: 4px;
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
+}
+
+/* Таймер */
+.timer-box { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 24px 16px; }
+.ring-wrap { position: relative; width: 240px; height: 240px; }
+.ring-wrap svg { transform: rotate(-90deg); }
+.ring-time {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.ring-time .t { font-family: var(--mono); font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.ring-time .m { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--muted); margin-top: 4px; }
+.bar-chart { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; height: 128px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; }
+.bar-val { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.bar { width: 100%; border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--accent) 40%, transparent); }
+.bar.today { background: var(--accent); }
+.bar.empty { background: var(--muted-bg); }
+.bar-label { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.bar-label.today { color: var(--text); font-weight: 700; }
+
+/* Флеш-картки */
+.flip-scene { perspective: 1200px; cursor: pointer; user-select: none; }
+.flip-inner { position: relative; min-height: 224px; transition: transform .5s; transform-style: preserve-3d; }
+.flip-scene.flipped .flip-inner { transform: rotateY(180deg); }
+.flip-face {
+  position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 24px; background: var(--card);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.flip-back { transform: rotateY(180deg); }
+.face-tag { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
+.face-q { font-size: 22px; font-weight: 700; line-height: 1.3; margin-top: 10px; }
+.face-a { font-size: 18px; font-weight: 600; line-height: 1.35; margin-top: 10px; }
+.hint { font-size: 11.5px; color: var(--muted); margin-top: 18px; }
+
+/* Звички */
+.habit-icon {
+  width: 36px; height: 36px; border-radius: 6px; border: 1px solid var(--border-strong);
+  display: flex; align-items: center; justify-content: center; color: var(--muted); flex-shrink: 0;
+}
+.week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 12px; }
+.day-cell {
+  height: 40px; border: 1px solid var(--border-strong); border-radius: 5px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  color: var(--muted); font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+}
+.day-cell.done { border-color: transparent; }
+.day-cell.future { border-style: dashed; opacity: .35; cursor: not-allowed; }
+.day-cell.today:not(.done) { border-color: var(--text); }
+.streak { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.streak.zero { color: color-mix(in srgb, var(--muted) 50%, transparent); }
+
+.empty {
+  border: 1px dashed var(--border-strong); border-radius: 8px;
+  padding: 36px 16px; text-align: center;
+}
+.empty b { display: block; font-size: 14px; }
+.empty span { display: block; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+
+/* Модалки */
+.modal-back {
+  position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.5);
+  display: none; align-items: center; justify-content: center; padding: 16px;
+}
+.modal-back.open { display: flex; }
+.modal {
+  width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px; max-height: 90vh; overflow-y: auto;
+  animation: fadein .15s ease;
+}
+.modal h2 { font-size: 16px; font-weight: 700; }
+.modal .m-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; margin-bottom: 14px; }
+.modal-grid { display: grid; gap: 12px; }
+.modal-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.err { color: var(--danger); font-size: 12.5px; }
+
+.icon-pick { display: grid; grid-template-columns: repeat(9, 1fr); gap: 5px; }
+.icon-pick button {
+  height: 34px; border: 1px solid var(--border-strong); border-radius: 5px;
+  display: flex; align-items: center; justify-content: center; color: var(--muted);
+}
+.icon-pick button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.color-pick { display: flex; gap: 8px; }
+.color-pick button { width: 26px; height: 26px; border-radius: 4px; opacity: .65; }
+.color-pick button.active { opacity: 1; outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* Тост */
+#toast {
+  position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%) translateY(10px);
+  z-index: 80; background: var(--accent); color: var(--accent-fg);
+  padding: 8px 14px; border-radius: var(--r); font-size: 13px; font-weight: 500;
+  opacity: 0; pointer-events: none; transition: all .2s;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+@media (min-width: 900px) { #toast { bottom: 24px; } }
+
+/* Друк */
+@media print {
+  .sidebar, .m-header, .bottom-nav, .no-print, #toast { display: none !important; }
+  main { padding: 0 !important; }
+  body { background: #fff; color: #000; }
+  .card, .row-list > *, .group-head { border-color: #bbb !important; background: #fff !important; }
+  .print-title { font-size: 20px; font-weight: 700; margin: 4px 0 12px; }
+}
+</style>
+</head>
+<body>
+<aside class="sidebar no-print">
+  <div class="brand">
+    <div class="brand-mark" id="brand-icon"></div>
+    <div>
+      <p class="brand-name">StudyFlow</p>
+      <p class="brand-sub" id="parity-side">органайзер студента</p>
+    </div>
+  </div>
+  <nav class="side-nav" id="side-nav" aria-label="Навігація"></nav>
+  <div class="side-foot">
+    <div class="side-clock-row">
+      <span class="clock" id="clock-side">--:--</span>
+      <button class="icon-btn" id="theme-side" aria-label="Переключити тему"></button>
+    </div>
+    <button class="btn outline" style="width:100%;justify-content:flex-start" id="data-side"></button>
+  </div>
+</aside>
+
+<header class="m-header no-print">
+  <div class="m-brand">
+    <div class="brand-mark" id="brand-icon-m"></div>
+    <div>
+      <p class="brand-name">StudyFlow</p>
+      <p class="brand-sub" id="parity-m">органайзер студента</p>
+    </div>
+  </div>
+  <div class="m-actions">
+    <span class="clock" id="clock-m">--:--</span>
+    <button class="icon-btn" id="data-m" aria-label="Меню даних"></button>
+    <button class="icon-btn" id="theme-m" aria-label="Переключити тему"></button>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <section class="view" id="view-home">
+      <div class="card" style="padding:18px;margin-bottom:16px">
+        <div style="display:grid;gap:18px">
+          <div>
+            <p class="mono" style="font-size:42px;font-weight:700;letter-spacing:-0.02em" id="home-clock">--:--:--</p>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:6px;font-size:13px;color:var(--muted)">
+              <span class="capitalize" id="home-date"></span>
+              <span class="parity-badge" id="parity-home"></span>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px" id="home-now"></div>
+        </div>
+      </div>
+      <div class="stat-strip" id="home-stats" style="margin-bottom:16px"></div>
+      <div class="quick-links" id="home-links"></div>
+    </section>
+
+    <section class="view" id="view-schedule">
+      <div class="head-row no-print">
+        <div>
+          <h1>Розклад</h1>
+          <p class="sub" id="schedule-sub"></p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn outline sm" id="print-btn"></button>
+          <button class="btn sm" id="add-lesson-btn"></button>
+        </div>
+      </div>
+      <div class="day-scroller no-print" id="day-pills"></div>
+      <div class="print-title" id="print-title" style="display:none"></div>
+      <div id="schedule-status" class="no-print" style="min-height:30px;margin-bottom:8px;font-size:13px"></div>
+      <div class="print-area" id="schedule-list"></div>
+    </section>
+
+    <section class="view" id="view-todo">
+      <div class="head-row">
+        <div>
+          <h1>Завдання</h1>
+          <p class="sub" id="todo-sub"></p>
+        </div>
+        <div class="seg no-print" id="todo-filters"></div>
+      </div>
+      <div class="progress no-print" style="margin-bottom:14px"><div id="todo-progress" style="width:0%"></div></div>
+      <div class="no-print" style="display:grid;gap:8px;grid-template-columns:1fr;margin-bottom:6px" id="todo-form">
+        <input class="input" id="todo-text" placeholder="Нове завдання…" autocomplete="off">
+        <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr">
+          <select class="select" id="todo-priority">
+            <option value="high">важлива</option>
+            <option value="medium" selected>середня</option>
+            <option value="low">низька</option>
+          </select>
+          <input class="input" type="date" id="todo-deadline" aria-label="Термін">
+        </div>
+        <button class="btn" id="todo-add-btn" style="justify-content:center"></button>
+      </div>
+      <p class="err no-print" id="todo-error" style="display:none"></p>
+      <div id="todo-groups" style="margin-top:12px;display:grid;gap:14px"></div>
+    </section>
+
+    <section class="view" id="view-pomodoro">
+      <div class="head-row no-print">
+        <div>
+          <h1>Фокус</h1>
+          <p class="sub">інтервальний таймер з обліком сесій</p>
+        </div>
+      </div>
+      <div style="display:grid;gap:20px" id="pomo-layout">
+        <div class="card timer-box">
+          <div class="seg" id="pomo-modes">
+            <button data-mode="focus" class="active">Фокус</button>
+            <button data-mode="break">Перерва</button>
+          </div>
+          <div class="ring-wrap">
+            <svg width="240" height="240" viewBox="0 0 240 240">
+              <circle cx="120" cy="120" r="110" fill="none" stroke="var(--border)" stroke-width="6"></circle>
+              <circle id="pomo-ring" cx="120" cy="120" r="110" fill="none" stroke="var(--text)" stroke-width="6"
+                stroke-linecap="butt" stroke-dasharray="691.15" stroke-dashoffset="691.15"></circle>
+            </svg>
+            <div class="ring-time">
+              <span class="t" id="pomo-time">25:00</span>
+              <span class="m" id="pomo-mode-label">фокус</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn" id="pomo-start" style="width:104px;justify-content:center"></button>
+            <button class="btn outline" id="pomo-reset" style="width:auto;padding:7px 9px" aria-label="Скинути"></button>
+            <button class="btn outline" id="pomo-skip" style="width:auto;padding:7px 9px" aria-label="Наступний етап"></button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px" class="no-print">
+            <span class="muted">тривалість:</span>
+            <select class="select mono" id="pomo-focus-len" style="width:78px;padding:4px 6px">
+              <option value="15">15 хв</option>
+              <option value="25" selected>25 хв</option>
+              <option value="45">45 хв</option>
+            </select>
+            <span class="muted">/</span>
+            <select class="select mono" id="pomo-break-len" style="width:70px;padding:4px 6px">
+              <option value="5" selected>5 хв</option>
+              <option value="10">10 хв</option>
+            </select>
+          </div>
+          <p class="mono no-print" id="pomo-finished" style="display:none;font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)"></p>
+        </div>
+        <div style="display:grid;gap:14px">
+          <div class="stat-strip" style="grid-template-columns:repeat(3,1fr)" id="pomo-stats"></div>
+          <div class="card" style="padding:16px">
+            <p class="stat-label">Тиждень · хвилини фокусу</p>
+            <div class="bar-chart" id="pomo-chart" style="margin-top:14px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-flashcards">
+      <div id="fc-root"></div>
+    </section>
+
+    <section class="view" id="view-habits">
+      <div class="head-row">
+        <div>
+          <h1>Звички</h1>
+          <p class="sub" id="habits-sub"></p>
+        </div>
+        <button class="btn sm" id="add-habit-btn"></button>
+      </div>
+      <div id="habits-list" style="display:grid;gap:12px"></div>
+    </section>
+
+    <footer class="page no-print">StudyFlow · дані зберігаються локально у браузері</footer>
+  </div>
+</main>
+
+<nav class="bottom-nav no-print" id="bottom-nav" aria-label="Мобільна навігація"></nav>
+
+<!-- Модалка: пара -->
+<div class="modal-back" id="lesson-modal">
+  <div class="modal">
+    <h2 id="lesson-modal-title">Нова пара</h2>
+    <p class="m-sub">Предмет, час, аудиторія та викладач</p>
+    <div class="modal-grid">
+      <div class="field"><label class="label" for="ls-subject">Предмет *</label>
+        <input class="input" id="ls-subject" placeholder="Програмування"></div>
+      <div class="modal-2col">
+        <div class="field"><label class="label" for="ls-day">День</label>
+          <select class="select" id="ls-day"></select></div>
+        <div class="field"><label class="label" for="ls-type">Тип</label>
+          <select class="select" id="ls-type">
+            <option>Лекція</option><option>Практика</option><option>Лабораторна</option>
+          </select></div>
+      </div>
+      <div class="modal-2col">
+        <div class="field"><label class="label" for="ls-start">Початок</label>
+          <input class="input" type="time" id="ls-start" value="08:30"></div>
+        <div class="field"><label class="label" for="ls-end">Кінець</label>
+          <input class="input" type="time" id="ls-end" value="09:50"></div>
+      </div>
+      <div class="modal-2col">
+        <div class="field"><label class="label" for="ls-room">Аудиторія</label>
+          <input class="input" id="ls-room" placeholder="205"></div>
+        <div class="field"><label class="label" for="ls-teacher">Викладач</label>
+          <input class="input" id="ls-teacher" placeholder="Шевченко І.О."></div>
+      </div>
+      <p class="err" id="lesson-error" style="display:none"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn outline" data-close="lesson-modal">Скасувати</button>
+      <button class="btn" id="lesson-save">Додати</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модалка: звичка -->
+<div class="modal-back" id="habit-modal">
+  <div class="modal">
+    <h2>Нова звичка</h2>
+    <p class="m-sub">Назва, іконка, колір</p>
+    <div class="modal-grid">
+      <div class="field"><label class="label" for="hb-name">Назва *</label>
+        <input class="input" id="hb-name" placeholder="Медитація 10 хвилин"></div>
+      <div class="field"><span class="label">Іконка</span>
+        <div class="icon-pick" id="hb-icons"></div></div>
+      <div class="field"><span class="label">Колір відміток</span>
+        <div class="color-pick" id="hb-colors"></div></div>
+      <p class="err" id="habit-error" style="display:none"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn outline" data-close="habit-modal">Скасувати</button>
+      <button class="btn" id="habit-save">Додати</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модалка: підтвердження -->
+<div class="modal-back" id="confirm-modal">
+  <div class="modal">
+    <h2 id="confirm-title">Підтверди</h2>
+    <p class="m-sub" id="confirm-desc"></p>
+    <div class="modal-foot">
+      <button class="btn outline" data-close="confirm-modal">Скасувати</button>
+      <button class="btn" id="confirm-yes">Гаразд</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+<script>
+'use strict';
+/* ================= Допоміжні ================= */
+const $ = (s, el) => (el || document).querySelector(s);
+const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+
+const DAY_NAMES = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
+const DAY_FULL = ['Понеділок','Вівторок','Середа','Четвер','П’ятниця','Субота','Неділя'];
+const todayIdx = () => { const d = new Date().getDay(); return d === 0 ? 7 : d; };
+const pad = (n) => String(n).padStart(2, '0');
+const dateKey = (d) => { d = d || new Date(); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); };
+const addDays = (d, n) => { const c = new Date(d); c.setDate(c.getDate()+n); return c; };
+const startOfWeek = () => { const c = new Date(); c.setHours(0,0,0,0); c.setDate(c.getDate() - (todayIdx(c)-1)); return c; };
+const hmToMin = (hm) => { const [h,m] = hm.split(':').map(Number); return (h||0)*60 + (m||0); };
+const nowMin = () => { const d = new Date(); return d.getHours()*60 + d.getMinutes(); };
+const plural = (n, one, few, many) => { const a=n%10, b=n%100; if(a===1&&b!==11) return one; if(a>=2&&a<=4&&(b<12||b>14)) return few; return many; };
+function humanDate(iso){ if(!iso) return ''; const [y,m,d] = iso.split('-').map(Number); const dt = new Date(y, m-1, d); const t = new Date(); t.setHours(0,0,0,0); const diff = Math.round((dt-t)/864e5); if(diff===0) return 'сьогодні'; if(diff===1) return 'завтра'; if(diff===-1) return 'вчора'; return dt.toLocaleDateString('uk-UA', {day:'numeric', month:'short'}); }
+function weekParity(){ const d = new Date(); const y = d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear()-1; const f = new Date(y, 8, 1); const off = (8 - f.getDay()) % 7; const fm = new Date(y, 8, 1+off); const days = Math.floor((d - fm) / 864e5); if(days < 0) return null; return (Math.floor(days/7)+1) % 2 === 1 ? 'числитель' : 'знаменник'; }
+function fmt(sec){ const m = Math.floor(sec/60), s = sec%60; return pad(m)+':'+pad(s); }
+
+/* ================= Іконки (stroke SVG) ================= */
+const P = {
+  home:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  calendar:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M8 15h.01"/><path d="M12 15h.01"/><path d="M16 15h.01"/>',
+  list:'<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
+  timer:'<line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>',
+  layers:'<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 12.18-8.58 3.91a2 2 0 0 1-1.66 0L3.18 12.18"/><path d="m22 17.18-8.58 3.91a2 2 0 0 1-1.66 0L3.18 17.18"/>',
+  flame:'<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  pencil:'<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+  trash:'<path d="M3 6h18"/><path d="M19 9v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9"/><path d="M9 22v-4h6v4"/><path d="M10 2h4"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  pause:'<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  rotate:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  skip:'<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>',
+  print:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+  arrow:'<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  back:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  grad:'<path d="M21.42 10.92a1 1 0 0 0-.02-1.84L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  moon:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  menu:'<line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
+  droplet:'<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+  book:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  dumbbell:'<path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l1.767-1.768a2 2 0 1 1 2.829 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/>',
+  brain:'<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>',
+  salad:'<path d="M7 21h10"/><path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z"/><path d="M11.4 12 15 4.5"/><path d="M5 12h16"/><path d="M21.9 12.5a5.5 5.5 0 0 1-7-7"/>',
+  footprints:'<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/>',
+  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  pencilLine:'<path d="M13 21h8"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+};
+const icon = (name, size) => '<svg viewBox="0 0 24 24" width="' + (size||16) + '" height="' + (size||16) + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (P[name]||'') + '</svg>';
+
+/* ================= Сховище та стан ================= */
+function load(key, fallback){ try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch(e){ return fallback; } }
+function save(key, val){ try { localStorage.setItem(key, JSON.stringify(val)); } catch(e){} }
+
+const KEY = { lessons:'sh:schedule', todos:'sh:todos', pomo:'sh:pomodoro', decks:'sh:decks', habits:'sh:habits' };
+
+const SEED = {
+  lessons: [
+    {id:'s1',day:1,subject:'Вища математика та лінійна алгебра',start:'08:30',end:'10:05',room:'Ауд. 301',teacher:'доц. Коваленко О.П.',type:'Лекція'},
+    {id:'s2',day:1,subject:'Алгоритми та структури даних',start:'10:25',end:'12:00',room:'Комп. 205',teacher:'ст. викл. Мельник І.В.',type:'Практика'},
+    {id:'s3',day:2,subject:'Веб-технології та UI розробка',start:'10:25',end:'12:00',room:'Ауд. 112',teacher:'доц. Бондаренко Н.В.',type:'Лекція'},
+    {id:'s4',day:2,subject:'Іноземна мова за проф. спрямуванням',start:'12:20',end:'13:55',room:'Ауд. 418',teacher:'викл. Білик О.С.',type:'Практика'},
+    {id:'s5',day:3,subject:'Бази даних та SQL',start:'08:30',end:'10:05',room:'Ауд. 201',teacher:'проф. Ткаченко В.І.',type:'Лекція'},
+    {id:'s6',day:3,subject:'Лабораторний практикум з БД',start:'10:25',end:'12:00',room:'Лаб. 305',teacher:'асист. Гриценко А.Б.',type:'Лабораторна'},
+    {id:'s7',day:4,subject:'Операційні системи та мережі',start:'12:20',end:'13:55',room:'Ауд. 208',teacher:'доц. Савчук С.О.',type:'Лекція'},
+    {id:'s8',day:4,subject:'Компʼютерний практикум з алгоритмів',start:'14:15',end:'15:50',room:'Лаб. 205',teacher:'ст. викл. Мельник І.В.',type:'Лабораторна'},
+    {id:'s9',day:5,subject:'Фізичне виховання',start:'10:25',end:'12:00',room:'Спорткомплекс',teacher:'тренер Гнатюк Д.І.',type:'Практика'},
+    {id:'s10',day:5,subject:'Архітектура компʼютерних систем',start:'12:20',end:'13:55',room:'Ауд. 210',teacher:'доц. Лисенко М.О.',type:'Практика'}
+  ],
+  todos: (function(){ const t = new Date(); return [
+    {id:'t1',text:'Здати лабораторну роботу №3 з Баз даних (SQL запити)',priority:'high',deadline:dateKey(t),done:false,createdAt:Date.now()-864e5},
+    {id:'t2',text:'Підготуватися до модульної контрольної з вищої математики',priority:'high',deadline:dateKey(addDays(t,2)),done:false,createdAt:Date.now()-432e5},
+    {id:'t3',text:'Опрацювати розділ 4 з операційних систем (потоки та процеси)',priority:'medium',deadline:dateKey(addDays(t,3)),done:false,createdAt:Date.now()-216e5},
+    {id:'t4',text:'Зробити презентацію з англійської мови про AI технології',priority:'low',deadline:dateKey(addDays(t,5)),done:false,createdAt:Date.now()-108e5},
+    {id:'t5',text:'Захистити розрахунково-графічну роботу з алгоритмів',priority:'medium',deadline:dateKey(addDays(t,-1)),done:true,createdAt:Date.now()-1728e5}
+  ];})(),
+  pomo: (function(){ const o = {totalSessions:3, days:{}}; o.days[dateKey(addDays(new Date(),-1))] = {sessions:3, minutes:75}; return o; })(),
+  decks: [
+    {id:'d1',name:'Веб-розробка: терміни та поняття',cards:[
+      {id:'c1',front:'DOM (Document Object Model)',back:'Обʼєктна модель документа — інтерфейс взаємодії зі структурою HTML та стилями',streak:2},
+      {id:'c2',front:'localStorage',back:'Вбудоване сховище браузера типу key-value, дані зберігаються навіть після закриття сторінки',streak:1},
+      {id:'c3',front:'REST API',back:'Архітектурний стиль обміну даними між клієнтом та сервером за протоколом HTTP з використанням JSON',streak:0},
+      {id:'c4',front:'CSS Flexbox / Grid',back:'Сучасні моделі верстки для гнучкого та двовимірного розташування елементів',streak:0},
+      {id:'c5',front:'Асинхронність (async/await)',back:'Синтаксичний цукор над Promise для виконання операцій без блокування інтерфейсу',streak:0}
+    ]},
+    {id:'d2',name:'Бази даних та SQL',cards:[
+      {id:'c6',front:'Первинний ключ (Primary Key)',back:'Унікальний ідентифікатор кожного запису в таблиці реляційної бази даних',streak:0},
+      {id:'c7',front:'Індексація (B-Tree)',back:'Спеціальна структура для швидкого пошуку рядків без повного сканування всієї таблиці',streak:0},
+      {id:'c8',front:'JOIN (INNER, LEFT, RIGHT)',back:'Операція обʼєднання даних з двох чи більше таблиць за спільним полем',streak:0},
+      {id:'c9',front:'ACID властивості',back:'Atomicity (атомарність), Consistency (узгодженість), Isolation (ізоляція), Durability (довговічність)',streak:0}
+    ]}
+  ],
+  habits: (function(){ const t = new Date(); return [
+    {id:'h1',name:'Випити 1.5–2 л води',icon:'droplet',color:'cyan',log:(function(l){l[dateKey(addDays(t,-1))]=true;l[dateKey(t)]=true;return l;})({})},
+    {id:'h2',name:'Повторити картки 15 хв',icon:'book',color:'emerald',log:(function(l){l[dateKey(addDays(t,-2))]=true;l[dateKey(addDays(t,-1))]=true;return l;})({})},
+    {id:'h3',name:'Ранкова розминка',icon:'dumbbell',color:'amber',log:{}}
+  ];})()
+};
+
+const S = {
+  tab: 'home',
+  lessons: load(KEY.lessons, SEED.lessons),
+  todos: load(KEY.todos, SEED.todos),
+  pomo: load(KEY.pomo, SEED.pomo),
+  decks: load(KEY.decks, SEED.decks),
+  habits: load(KEY.habits, SEED.habits),
+  filter: 'all',
+  day: todayIdx(),
+  fc: { view:'list', deckId:null, queue:[], flipped:false, know:0, dk:0, total:0, front:'', back:'', cardEdit:null },
+  pom: { mode:'focus', focusLen:25, breakLen:5, left:1500, running:false, endAt:null, finished:null },
+  hbIcon: 'droplet', hbColor: 'emerald'
+};
+if (!localStorage.getItem(KEY.lessons)) save(KEY.lessons, S.lessons);
+if (!localStorage.getItem(KEY.todos)) save(KEY.todos, S.todos);
+if (!localStorage.getItem(KEY.pomo)) save(KEY.pomo, S.pomo);
+if (!localStorage.getItem(KEY.decks)) save(KEY.decks, S.decks);
+if (!localStorage.getItem(KEY.habits)) save(KEY.habits, S.habits);
+
+const HABIT_COLORS = { emerald:'#059669', cyan:'#0891b2', amber:'#d97706', rose:'#e11d48', fuchsia:'#c026d3' };
+const HABIT_ICONS = ['droplet','book','dumbbell','moon','brain','salad','footprints','music','pencilLine'];
+
+/* ================= Тост ================= */
+let toastTimer = null;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200); }
+
+/* ================= Тема ================= */
+function applyTheme(){ const dark = document.documentElement.classList.toggle('dark', localStorage.getItem('sh:theme') !== 'light'); localStorage.setItem('sh:theme', dark ? 'dark' : 'light'); $('#theme-side').innerHTML = icon(dark ? 'sun' : 'moon'); $('#theme-m').innerHTML = icon(dark ? 'sun' : 'moon'); }
+function toggleTheme(){ applyTheme(); }
+
+/* ================= Навігація ================= */
+const NAV = [
+  {id:'home', label:'Головна', short:'Головна', ic:'home'},
+  {id:'schedule', label:'Розклад', short:'Розклад', ic:'calendar'},
+  {id:'todo', label:'Завдання', short:'Завдання', ic:'list'},
+  {id:'pomodoro', label:'Фокус', short:'Фокус', ic:'timer'},
+  {id:'flashcards', label:'Картки', short:'Картки', ic:'layers'},
+  {id:'habits', label:'Звички', short:'Звички', ic:'flame'}
+];
+function buildNav(){
+  $('#side-nav').innerHTML = NAV.map(n =>
+    '<button class="nav-btn" data-tab="' + n.id + '">' + icon(n.ic) + n.label + '</button>').join('');
+  $('#bottom-nav').innerHTML = NAV.map(n =>
+    '<button data-tab="' + n.id + '">' + icon(n.ic, 18) + '<span>' + n.short + '</span></button>').join('');
+}
+function setTab(tab){
+  S.tab = tab;
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tab));
+  $$('.nav-btn, .bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  renderAll();
+}
+function renderAll(){
+  if (S.tab === 'home') renderHome();
+  if (S.tab === 'schedule') renderSchedule();
+  if (S.tab === 'todo') renderTodo();
+  if (S.tab === 'pomodoro') renderPomo();
+  if (S.tab === 'flashcards') renderFC();
+  if (S.tab === 'habits') renderHabits();
+}
+
+/* ================= ГОЛОВНА ================= */
+function habitStreak(h){ let s = 0; let c = h.log[dateKey()] ? new Date() : addDays(new Date(), -1); while (h.log[dateKey(c)]) { s++; c = addDays(c, -1); } return s; }
+function renderHome(){
+  const now = new Date();
+  $('#home-clock').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  $('#home-date').textContent = now.toLocaleDateString('uk-UA', {weekday:'long', day:'numeric', month:'long'});
+  const parity = weekParity();
+  $('#parity-home').textContent = parity || '';
+  $('#parity-home').style.display = parity ? '' : 'none';
+
+  const nMin = nowMin();
+  const today = S.lessons.filter(l => l.day === todayIdx()).sort((a,b) => hmToMin(a.start)-hmToMin(b.start));
+  const cur = today.find(l => hmToMin(l.start) <= nMin && nMin < hmToMin(l.end));
+  const next = today.find(l => hmToMin(l.start) > nMin);
+  let nowHtml = '';
+  if (cur) {
+    const p = Math.min(100, Math.round((nMin - hmToMin(cur.start)) / (hmToMin(cur.end)-hmToMin(cur.start)) * 100));
+    nowHtml = '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">' +
+      '<b>' + esc(cur.subject) + '</b><span class="mono muted" style="font-size:13px">до ' + cur.end + '</span></div>' +
+      '<div class="progress" style="margin-top:8px"><div style="width:' + p + '%"></div></div>' +
+      '<p style="font-size:12px;color:var(--muted);margin-top:6px">' + (100-p) + '% пари' + (cur.room ? ' · ауд. ' + esc(cur.room) : '') + (cur.teacher ? ' · ' + esc(cur.teacher) : '') + '</p>';
+  } else if (next) {
+    const m = Math.max(0, hmToMin(next.start) - nMin);
+    const left = m >= 60 ? Math.floor(m/60) + ' год ' + (m%60) + ' хв' : m + ' хв';
+    nowHtml = '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">' +
+      '<b>' + esc(next.subject) + '</b><span class="mono muted" style="font-size:13px">о ' + next.start + '</span></div>' +
+      '<p style="font-size:12px;color:var(--muted);margin-top:6px">початок через ' + left + (next.room ? ' · ауд. ' + esc(next.room) : '') + '</p>';
+  } else {
+    nowHtml = '<b>' + (today.length ? 'Пари на сьогодні скінчились' : 'Пар немає — ' + DAY_FULL[todayIdx()-1].toLowerCase()) + '</b>';
+  }
+  $('#home-now').innerHTML = nowHtml;
+
+  const tKey = dateKey();
+  const active = S.todos.filter(t => !t.done);
+  const over = active.filter(t => t.deadline && t.deadline < tKey).length;
+  const focus = (S.pomo.days[tKey] || {sessions:0, minutes:0});
+  const maxStreak = S.habits.length ? Math.max.apply(null, S.habits.map(habitStreak)) : 0;
+  const cards = [
+    {label:'Пар сьогодні', value:String(today.length), note: today.length ? 'до ' + today[today.length-1].end : 'вихідний', tab:'schedule'},
+    {label:'Завдання', value:String(active.length), note: over ? over + ' ' + plural(over,'прострочене','прострочені','прострочені') : 'без прострочених', danger: over > 0, tab:'todo'},
+    {label:'Фокус сьогодні', value:focus.minutes + ' хв', note:focus.sessions + ' ' + plural(focus.sessions,'сесія','сесії','сесій'), tab:'pomodoro'},
+    {label:'Серія звичок', value: maxStreak ? maxStreak + ' дн' : '—', note: S.habits.length + ' ' + plural(S.habits.length,'звичка','звички','звичок'), tab:'habits'}
+  ];
+  $('#home-stats').innerHTML = cards.map(c =>
+    '<button class="stat-cell" data-tab="' + c.tab + '">' +
+    '<p class="stat-label">' + c.label + '</p>' +
+    '<p class="stat-value' + (c.danger ? ' danger' : '') + '">' + c.value + '</p>' +
+    '<p class="stat-note' + (c.danger ? ' danger' : '') + '">' + c.note + '</p></button>').join('');
+
+  $('#home-links').innerHTML = [
+    {label:'Розклад', tab:'schedule'}, {label:'Додати завдання', tab:'todo'},
+    {label:'Почати фокус', tab:'pomodoro'}, {label:'Повторити картки', tab:'flashcards'}
+  ].map(a => '<button class="quick-link" data-tab="' + a.tab + '">' + a.label + icon('arrow', 14) + '</button>').join('');
+}
+
+/* ================= РОЗКЛАД ================= */
+let lessonEditId = null;
+function renderSchedule(){
+  const parity = weekParity();
+  $('#schedule-sub').textContent = (parity ? 'тиждень: ' + parity + ' · ' : '') + S.lessons.length + ' пар на тиждень';
+  $('#print-btn').innerHTML = icon('print', 14) + ' Друк';
+  $('#add-lesson-btn').innerHTML = icon('plus', 14) + ' Додати пару';
+
+  $('#day-pills').innerHTML = DAY_NAMES.map((n, i) => {
+    const cnt = S.lessons.filter(l => l.day === i+1).length;
+    const isToday = i+1 === todayIdx();
+    return '<button class="pill-day' + (S.day === i+1 ? ' active' : '') + '" data-day="' + (i+1) + '">' + n +
+      (cnt ? '<span class="cnt">' + cnt + '</span>' : '') +
+      (isToday && S.day !== i+1 ? '<span class="dot"></span>' : '') + '</button>';
+  }).join('');
+
+  const dayLessons = S.lessons.filter(l => l.day === S.day).sort((a,b) => hmToMin(a.start)-hmToMin(b.start));
+  const pt = $('#print-title');
+  pt.textContent = DAY_FULL[S.day-1] + (S.day === todayIdx() ? ' (сьогодні)' : '');
+
+  const nM = nowMin();
+  const cur = S.day === todayIdx() ? dayLessons.find(l => hmToMin(l.start) <= nM && nM < hmToMin(l.end)) : null;
+  const next = S.day === todayIdx() ? dayLessons.find(l => hmToMin(l.start) > nM) : null;
+
+  let status = '';
+  if (cur) {
+    const p = Math.min(100, Math.round((nM - hmToMin(cur.start)) / (hmToMin(cur.end)-hmToMin(cur.start)) * 100));
+    status = '<div style="display:flex;align-items:center;gap:10px">' +
+      '<span style="width:8px;height:8px;border-radius:50%;background:var(--text);animation:pulse 1.5s infinite"></span>' +
+      '<span>Йде: <b>' + esc(cur.subject) + '</b>' + (cur.room ? ', ауд. ' + esc(cur.room) : '') + '</span>' +
+      '<div class="progress" style="width:100px"><div style="width:' + p + '%"></div></div>' +
+      '<span class="mono muted" style="font-size:12px">до ' + cur.end + '</span></div>';
+  } else if (next) {
+    status = '<span class="muted">Наступна: <b style="color:var(--text)">' + esc(next.subject) + '</b> о ' + next.start + '</span>';
+  } else {
+    status = '<span class="muted">' + (dayLessons.length ? 'Пар більше немає' : 'Занять немає') + '</span>';
+  }
+  $('#schedule-status').innerHTML = status;
+
+  if (!dayLessons.length) {
+    $('#schedule-list').innerHTML = '<div class="empty"><b>' + DAY_FULL[S.day-1] + ' — занять немає</b><span>Додай пару, якщо вона є в розкладі</span></div>';
+    return;
+  }
+  $('#schedule-list').innerHTML = '<div class="card row-list">' + dayLessons.map(l => {
+    const isNow = cur && cur.id === l.id;
+    const isPast = S.day === todayIdx() && hmToMin(l.end) <= nM && !isNow;
+    return '<div class="row" style="' + (isNow ? 'background:var(--muted-bg)' : '') + (isPast ? ';opacity:.45' : '') + '">' +
+      '<div style="width:64px;flex-shrink:0"><p class="mono" style="font-weight:700;font-size:13.5px">' + l.start + '</p><p class="mono muted" style="font-size:11.5px">' + l.end + '</p></div>' +
+      '<div style="min-width:0;flex:1"><p style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(l.subject) + '</p>' +
+      '<p class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + [l.type, l.room ? 'ауд. ' + l.room : '', l.teacher].filter(Boolean).map(esc).join(' · ') + '</p></div>' +
+      (isNow ? '<span class="now-badge">зараз</span>' : '') +
+      '<div class="row-actions no-print">' +
+      '<button class="icon-btn" data-action="lesson-edit" data-id="' + l.id + '" aria-label="Редагувати">' + icon('pencil', 14) + '</button>' +
+      '<button class="icon-btn danger" data-action="lesson-del" data-id="' + l.id + '" aria-label="Видалити">' + icon('trash', 14) + '</button>' +
+      '</div></div>';
+  }).join('') + '</div>';
+}
+function openLessonModal(lesson){
+  lessonEditId = lesson ? lesson.id : null;
+  $('#lesson-modal-title').textContent = lesson ? 'Редагувати пару' : 'Нова пара';
+  $('#lesson-save').textContent = lesson ? 'Зберегти' : 'Додати';
+  $('#ls-subject').value = lesson ? lesson.subject : '';
+  $('#ls-day').value = lesson ? String(lesson.day) : String(S.day);
+  $('#ls-type').value = lesson ? lesson.type : 'Лекція';
+  $('#ls-start').value = lesson ? lesson.start : '08:30';
+  $('#ls-end').value = lesson ? lesson.end : '09:50';
+  $('#ls-room').value = lesson ? lesson.room : '';
+  $('#ls-teacher').value = lesson ? lesson.teacher : '';
+  $('#lesson-error').style.display = 'none';
+  $('#lesson-modal').classList.add('open');
+  $('#ls-subject').focus();
+}
+function saveLesson(){
+  const subject = $('#ls-subject').value.trim();
+  const start = $('#ls-start').value, end = $('#ls-end').value;
+  const err = $('#lesson-error');
+  if (!subject) { err.textContent = 'Вкажи назву предмета'; err.style.display = ''; return; }
+  if (hmToMin(end) <= hmToMin(start)) { err.textContent = 'Кінець має бути пізнішим за початок'; err.style.display = ''; return; }
+  const data = {
+    id: lessonEditId || uid(), day: Number($('#ls-day').value), subject,
+    start, end, room: $('#ls-room').value.trim(), teacher: $('#ls-teacher').value.trim(), type: $('#ls-type').value
+  };
+  if (lessonEditId) S.lessons = S.lessons.map(l => l.id === lessonEditId ? data : l);
+  else S.lessons.push(data);
+  save(KEY.lessons, S.lessons);
+  S.day = data.day;
+  closeModal('lesson-modal');
+  renderSchedule();
+  toast(lessonEditId ? 'Пару оновлено' : 'Пару додано');
+}
+
+/* ================= ЗАВДАННЯ ================= */
+const FILTERS = {all:'Всі', active:'Активні', done:'Виконані'};
+function renderTodo(){
+  const tKey = dateKey();
+  const weekEnd = dateKey(addDays(new Date(), 7));
+  const done = S.todos.filter(t => t.done).length;
+  const over = S.todos.filter(t => !t.done && t.deadline && t.deadline < tKey).length;
+  $('#todo-sub').innerHTML = done + ' із ' + S.todos.length + ' виконано' +
+    (over ? ' · <span class="danger" style="font-weight:600">' + over + ' ' + plural(over,'прострочене','прострочені','прострочені') + '</span>' : '');
+  $('#todo-progress').style.width = (S.todos.length ? Math.round(done / S.todos.length * 100) : 0) + '%';
+  $('#todo-filters').innerHTML = Object.keys(FILTERS).map(f =>
+    '<button data-filter="' + f + '"' + (S.filter === f ? ' class="active"' : '') + '>' + FILTERS[f] + '</button>').join('');
+  $('#todo-add-btn').innerHTML = icon('plus', 14) + ' Додати';
+
+  const W = {high:0, medium:1, low:2};
+  const pool = S.todos.slice().sort((a,b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    const ad = a.deadline || '9999-12-31', bd = b.deadline || '9999-12-31';
+    if (ad !== bd) return ad < bd ? -1 : 1;
+    return W[a.priority] - W[b.priority] || a.createdAt - b.createdAt;
+  }).filter(t => S.filter === 'all' ? true : S.filter === 'active' ? !t.done : t.done);
+
+  const groups = [
+    {title:'Прострочені', items: pool.filter(t => !t.done && t.deadline && t.deadline < tKey), danger:true},
+    {title:'Сьогодні', items: pool.filter(t => !t.done && t.deadline === tKey)},
+    {title:'Цей тиждень', items: pool.filter(t => !t.done && t.deadline && t.deadline > tKey && t.deadline <= weekEnd)},
+    {title:'Пізніше', items: pool.filter(t => !t.done && (!t.deadline || t.deadline > weekEnd))},
+    {title:'Виконані', items: pool.filter(t => t.done)}
+  ].filter(g => g.items.length);
+
+  $('#todo-groups').innerHTML = S.todos.length === 0
+    ? '<div class="empty"><b>Завдань немає</b><span>Додай перше — форма вище</span></div>'
+    : groups.length
+      ? groups.map(g =>
+        '<div class="card" style="overflow:hidden"><div class="group-head' + (g.danger ? ' danger' : '') + '">' + g.title + ' · ' + g.items.length + '</div>' +
+        '<div class="row-list">' + g.items.map(t => {
+          const od = !t.done && t.deadline && t.deadline < tKey;
+          return '<div class="row">' +
+            '<button data-action="todo-toggle" data-id="' + t.id + '" aria-label="Виконати" style="flex-shrink:0;width:17px;height:17px;border:1.5px solid ' + (t.done ? 'var(--accent)' : 'var(--border-strong)') + ';border-radius:4px;background:' + (t.done ? 'var(--accent)' : 'transparent') + ';color:var(--accent-fg);display:flex;align-items:center;justify-content:center">' + (t.done ? icon('check', 11) : '') + '</button>' +
+            '<div style="min-width:0;flex:1"><p style="font-weight:500;font-size:13.5px' + (t.done ? ';color:var(--muted);text-decoration:line-through' : '') + '">' + esc(t.text) + '</p>' +
+            ((t.deadline || t.priority === 'high') ? '<p class="muted" style="font-size:11.5px;margin-top:2px">' +
+              (t.priority === 'high' && !t.done ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--text);margin-right:6px;vertical-align:middle"></span>' : '') +
+              (t.priority !== 'medium' ? esc({high:'важлива', low:'низька', medium:''}[t.priority]) + ' · ' : '') +
+              (t.deadline ? '<span class="mono' + (od ? ' danger" style="font-weight:700' : '') + '">' + humanDate(t.deadline) + '</span>' : '') +
+              '</p>' : '') + '</div>' +
+            '<div class="row-actions no-print"><button class="icon-btn danger" data-action="todo-del" data-id="' + t.id + '" aria-label="Видалити">' + icon('trash', 14) + '</button></div>' +
+            '</div>';
+        }).join('') + '</div></div>').join('')
+      : '<div class="empty"><span>У фільтрі «' + FILTERS[S.filter] + '» порожньо</span></div>';
+}
+function addTodo(){
+  const text = $('#todo-text').value.trim();
+  const err = $('#todo-error');
+  if (!text) { err.textContent = 'Впиши завдання'; err.style.display = ''; return; }
+  S.todos.push({ id: uid(), text, priority: $('#todo-priority').value, deadline: $('#todo-deadline').value, done: false, createdAt: Date.now() });
+  save(KEY.todos, S.todos);
+  $('#todo-text').value = ''; $('#todo-deadline').value = ''; $('#todo-priority').value = 'medium';
+  err.style.display = 'none';
+  renderTodo();
+}
+
+/* ================= ФОКУС (помодоро) ================= */
+let audioCtx = null;
+function beep(){
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    [880, 1174.7].forEach((f, i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type = 'sine'; o.frequency.value = f;
+      const t0 = audioCtx.currentTime + i * 0.35;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
+      o.start(t0); o.stop(t0 + 0.32);
+    });
+  } catch(e){}
+}
+const CIRC = 2 * Math.PI * 110;
+function pomoTotal(){ return (S.pom.mode === 'focus' ? S.pom.focusLen : S.pom.breakLen) * 60; }
+function finishPhase(byUser){
+  beep();
+  S.pom.running = false; S.pom.endAt = null; S.pom.finished = S.pom.mode;
+  if (S.pom.mode === 'focus') {
+    if (!byUser) {
+      const key = dateKey();
+      const day = S.pomo.days[key] || {sessions:0, minutes:0};
+      S.pomo = { totalSessions: S.pomo.totalSessions + 1,
+        days: Object.assign({}, S.pomo.days, (function(){ const o = {}; o[key] = {sessions: day.sessions+1, minutes: day.minutes + S.pom.focusLen}; return o; })()) };
+      save(KEY.pomo, S.pomo);
+    }
+    switchMode('break');
+  } else {
+    switchMode('focus');
+  }
+}
+function switchMode(m){
+  S.pom.mode = m; S.pom.running = false; S.pom.endAt = null; S.pom.finished = null;
+  S.pom.left = (m === 'focus' ? S.pom.focusLen : S.pom.breakLen) * 60;
+  renderPomo();
+}
+function renderPomo(){
+  $$('#pomo-modes button').forEach(b => b.classList.toggle('active', b.dataset.mode === S.pom.mode));
+  $('#pomo-time').textContent = fmt(S.pom.left);
+  $('#pomo-mode-label').textContent = S.pom.mode === 'focus' ? 'фокус' : 'перерва';
+  $('#pomo-ring').style.strokeDashoffset = String(CIRC * (1 - (pomoTotal() ? (pomoTotal() - S.pom.left) / pomoTotal() : 0)));
+  $('#pomo-start').innerHTML = S.pom.running ? icon('pause', 14) + ' Пауза' : icon('play', 14) + ' Старт';
+  $('#pomo-reset').innerHTML = icon('rotate', 14);
+  $('#pomo-skip').innerHTML = icon('skip', 14);
+  $('#pomo-focus-len').value = String(S.pom.focusLen);
+  $('#pomo-break-len').value = String(S.pom.breakLen);
+  $('#pomo-focus-len').disabled = S.pom.running;
+  $('#pomo-break-len').disabled = S.pom.running;
+  const fin = $('#pomo-finished');
+  if (S.pom.finished) { fin.style.display = ''; fin.textContent = S.pom.finished === 'focus' ? 'сесія зарахована' : 'перерва завершена'; }
+  else fin.style.display = 'none';
+
+  const tKey = dateKey();
+  const todayStats = S.pomo.days[tKey] || {sessions:0, minutes:0};
+  $('#pomo-stats').innerHTML = [
+    ['Сьогодні', todayStats.sessions, plural(todayStats.sessions,'сесія','сесії','сесій')],
+    ['Хвилин', todayStats.minutes, 'фокусу сьогодні'],
+    ['Всього', S.pomo.totalSessions, 'за весь час']
+  ].map(c => '<div class="stat-cell"><p class="stat-label">' + c[0] + '</p><p class="stat-value">' + c[1] + '</p><p class="stat-note">' + c[2] + '</p></div>').join('');
+
+  const mon = startOfWeek();
+  const days = Array.from({length:7}, (_, i) => { const d = addDays(mon, i); const k = dateKey(d); return {k, m: (S.pomo.days[k]||{minutes:0}).minutes, l: DAY_NAMES[i], today: i+1 === todayIdx()}; });
+  const max = Math.max.apply(null, [25].concat(days.map(d => d.m)));
+  $('#pomo-chart').innerHTML = days.map(d =>
+    '<div class="bar-col"><span class="bar-val">' + (d.m > 0 ? d.m : '') + '</span>' +
+    '<div class="bar' + (d.today ? ' today' : d.m > 0 ? '' : ' empty') + '" style="height:' + Math.max(3, d.m/max*100) + '%"></div>' +
+    '<span class="bar-label' + (d.today ? ' today' : '') + '">' + d.l + '</span></div>').join('');
+  document.title = S.pom.running ? fmt(S.pom.left) + ' · ' + (S.pom.mode === 'focus' ? 'фокус' : 'перерва') + ' — StudyFlow' : 'StudyFlow — помічник студента';
+}
+setInterval(() => {
+  if (!S.pom.running || S.pom.endAt === null) return;
+  const remain = Math.max(0, Math.round((S.pom.endAt - Date.now()) / 1000));
+  S.pom.left = remain;
+  if (S.tab === 'pomodoro') renderPomo(); else document.title = fmt(remain) + ' · ' + (S.pom.mode === 'focus' ? 'фокус' : 'перерва') + ' — StudyFlow';
+  if (remain <= 0) finishPhase(false);
+}, 250);
+
+/* ================= КАРТКИ ================= */
+const MASTERY = 2;
+function fcDeck(){ return S.decks.find(d => d.id === S.fc.deckId) || null; }
+function saveDecks(){ save(KEY.decks, S.decks); }
+function renderFC(){
+  const root = $('#fc-root');
+  if (S.fc.view === 'study') {
+    const deck = fcDeck();
+    if (!deck) { S.fc.view = 'list'; return renderFC(); }
+    const done = S.fc.queue.length === 0;
+    const acc = S.fc.know + S.fc.dk > 0 ? Math.round(S.fc.know / (S.fc.know + S.fc.dk) * 100) : 0;
+    if (done) {
+      root.innerHTML = '<div class="head-row"><button class="btn outline sm" data-action="fc-list">' + icon('back', 14) + ' Колоди</button></div>' +
+        '<div class="card" style="padding:44px 16px;text-align:center">' +
+        '<p class="mono" style="font-size:38px;font-weight:700">' + acc + '%</p>' +
+        '<p class="muted" style="font-size:13px;margin-top:6px">правильних ' + S.fc.know + ' · хибних ' + S.fc.dk + '</p>' +
+        '<div style="display:flex;justify-content:center;gap:8px;margin-top:20px">' +
+        '<button class="btn outline sm" data-action="fc-again">' + icon('rotate', 14) + ' Ще раз</button>' +
+        '<button class="btn sm" data-action="fc-list">До колод</button></div></div>';
+      return;
+    }
+    const card = deck.cards.find(c => c.id === S.fc.queue[0]);
+    const studied = S.fc.total - S.fc.queue.length;
+    root.innerHTML = '<div class="head-row"><button class="btn outline sm" data-action="fc-list">' + icon('back', 14) + ' Колоди</button>' +
+      '<p class="mono muted" style="font-size:13px">' + esc(deck.name) + ' · ' + S.fc.queue.length + ' / ' + S.fc.total + '</p></div>' +
+      '<div class="progress" style="margin-bottom:12px"><div style="width:' + (S.fc.total ? Math.round(studied / S.fc.total * 100) : 0) + '%"></div></div>' +
+      '<div class="flip-scene' + (S.fc.flipped ? ' flipped' : '') + '" data-action="fc-flip" role="button" tabindex="0" aria-label="Перевернути картку">' +
+      '<div class="flip-inner">' +
+      '<div class="flip-face"><p class="face-tag">питання</p><p class="face-q">' + esc(card.front) + '</p>' +
+      '<p class="hint">клік або <span class="kbd">space</span> — перевернути</p></div>' +
+      '<div class="flip-face flip-back"><p class="face-tag">відповідь</p><p class="face-a">' + esc(card.back) + '</p></div>' +
+      '</div></div>' +
+      (S.fc.flipped
+        ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">' +
+          '<button class="btn outline" style="justify-content:center;padding:11px" data-action="fc-answer" data-know="0">Не знаю <span class="kbd">1</span></button>' +
+          '<button class="btn" style="justify-content:center;padding:11px" data-action="fc-answer" data-know="1">Знаю <span class="kbd">2</span></button></div>'
+        : '<p class="hint" style="text-align:center">спершу згадай відповідь, потім переверни</p>');
+    return;
+  }
+
+  if (S.fc.view === 'edit') {
+    const deck = fcDeck();
+    if (!deck) { S.fc.view = 'list'; return renderFC(); }
+    root.innerHTML = '<div class="head-row"><button class="btn outline sm" data-action="fc-list">' + icon('back', 14) + ' Колоди</button>' +
+      '<div style="display:flex;align-items:center;gap:6px"><h1>' + esc(deck.name) + '</h1>' +
+      '<button class="icon-btn danger" data-action="fc-del" data-id="' + deck.id + '" aria-label="Видалити колоду">' + icon('trash', 14) + '</button></div></div>' +
+      '<div class="card" style="padding:14px;display:grid;gap:10px">' +
+      '<div style="display:grid;gap:10px;grid-template-columns:1fr 1fr">' +
+      '<div class="field"><label class="label">Питання</label><textarea class="input" id="fc-front" rows="2" placeholder="Що таке localStorage?">' + esc(S.fc.front) + '</textarea></div>' +
+      '<div class="field"><label class="label">Відповідь</label><textarea class="input" id="fc-back" rows="2" placeholder="Сховище даних браузера">' + esc(S.fc.back) + '</textarea></div></div>' +
+      '<p class="err" id="fc-error" style="display:none"></p>' +
+      '<div style="display:flex;gap:8px">' +
+      '<button class="btn sm" data-action="fc-card-save">' + (S.fc.cardEdit ? icon('pencil', 13) + ' Зберегти' : icon('plus', 13) + ' Додати картку') + '</button>' +
+      (S.fc.cardEdit ? '<button class="btn outline sm" data-action="fc-card-cancel">Скасувати</button>' : '') + '</div></div>' +
+      (deck.cards.length
+        ? '<div class="card row-list" style="margin-top:14px">' + deck.cards.map(c =>
+          '<div class="row"><div style="min-width:0;flex:1"><p style="font-weight:500;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(c.front) + '</p>' +
+          '<p class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(c.back) + '</p></div>' +
+          '<span class="mono muted" style="font-size:11.5px;flex-shrink:0">' + (c.streak >= MASTERY ? 'вивчено' : 'серія ' + c.streak) + '</span>' +
+          '<div class="row-actions"><button class="icon-btn" data-action="fc-card-edit" data-id="' + c.id + '" aria-label="Редагувати">' + icon('pencil', 13) + '</button>' +
+          '<button class="icon-btn danger" data-action="fc-card-del" data-id="' + c.id + '" aria-label="Видалити">' + icon('trash', 13) + '</button></div></div>').join('') + '</div>'
+        : '<div class="empty" style="margin-top:14px"><span>Карток немає — додай першу</span></div>');
+    return;
+  }
+
+  /* список колод */
+  const totalLearned = S.decks.reduce((a, d) => a + d.cards.filter(c => c.streak >= MASTERY).length, 0);
+  root.innerHTML = '<div class="head-row"><div><h1>Картки</h1><p class="sub">' +
+    S.decks.length + ' ' + plural(S.decks.length,'колода','колоди','колод') + ' · ' + totalLearned + ' вивчених</p></div>' +
+    '<button class="btn sm" data-action="fc-new">' + icon('plus', 14) + ' Нова колода</button></div>' +
+    '<div id="fc-new-box"></div>' +
+    (S.decks.length === 0
+      ? '<div class="empty"><b>Колід немає</b><span>Створи колоду з термінів до іспиту</span></div>'
+      : '<div class="card row-list">' + S.decks.map(d => {
+        const learned = d.cards.filter(c => c.streak >= MASTERY).length;
+        const pct = d.cards.length ? Math.round(learned / d.cards.length * 100) : 0;
+        return '<div class="row"><div style="min-width:0;flex:1"><p style="font-weight:600">' + esc(d.name) + '</p>' +
+          '<p class="mono muted" style="font-size:12px">' + d.cards.length + ' ' + plural(d.cards.length,'картка','картки','карток') + ' · ' + learned + ' вивчено · ' + pct + '%</p></div>' +
+          '<button class="btn outline sm" data-action="fc-study" data-id="' + d.id + '" ' + (d.cards.length ? '' : 'disabled style="opacity:.4"') + '>' + icon('play', 13) + ' Вчити</button>' +
+          '<div class="row-actions"><button class="icon-btn" data-action="fc-edit" data-id="' + d.id + '" aria-label="Редагувати">' + icon('pencil', 14) + '</button>' +
+          '<button class="icon-btn danger" data-action="fc-del" data-id="' + d.id + '" aria-label="Видалити">' + icon('trash', 14) + '</button></div></div>';
+      }).join('') + '</div>');
+}
+function fcStartStudy(deck){
+  if (!deck.cards.length) return;
+  S.fc.view = 'study'; S.fc.deckId = deck.id;
+  S.fc.queue = deck.cards.map(c => c.id);
+  for (let i = S.fc.queue.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i+1)); const t = S.fc.queue[i]; S.fc.queue[i] = S.fc.queue[j]; S.fc.queue[j] = t; }
+  S.fc.total = deck.cards.length; S.fc.know = 0; S.fc.dk = 0; S.fc.flipped = false;
+  renderFC();
+}
+function fcAnswer(know){
+  const deck = fcDeck(); if (!deck) return;
+  const card = deck.cards.find(c => c.id === S.fc.queue[0]); if (!card) return;
+  if (know) S.fc.know++; else S.fc.dk++;
+  deck.cards = deck.cards.map(c => c.id === card.id ? {front:c.front, back:c.back, id:c.id, streak: know ? c.streak + 1 : 0} : c);
+  saveDecks();
+  S.fc.flipped = false;
+  if (know) S.fc.queue.shift(); else S.fc.queue.push(S.fc.queue.shift());
+  renderFC();
+}
+function fcSaveCard(){
+  const front = $('#fc-front').value.trim(), back = $('#fc-back').value.trim();
+  const err = $('#fc-error');
+  if (!front || !back) { err.textContent = 'Заповни питання і відповідь'; err.style.display = ''; return; }
+  const deck = fcDeck(); if (!deck) return;
+  if (S.fc.cardEdit) deck.cards = deck.cards.map(c => c.id === S.fc.cardEdit ? {id:c.id, streak:c.streak, front, back} : c);
+  else deck.cards.push({id: uid(), front, back, streak: 0});
+  saveDecks();
+  S.fc.front = ''; S.fc.back = ''; S.fc.cardEdit = null;
+  renderFC();
+}
+
+/* ================= ЗВИЧКИ ================= */
+function renderHabits(){
+  $('#habits-sub').textContent = S.habits.length + ' ' + plural(S.habits.length,'звичка','звички','звичок') + ' · тижнева сітка';
+  $('#add-habit-btn').innerHTML = icon('plus', 14) + ' Нова звичка';
+  const mon = startOfWeek();
+  const weekDates = Array.from({length:7}, (_, i) => dateKey(addDays(mon, i)));
+  const tIdx = todayIdx();
+
+  $('#habits-list').innerHTML = S.habits.length === 0
+    ? '<div class="empty"><b>Звичок немає</b><span>Додай звичку й відмічай щодня — серія рахується автоматично</span></div>'
+    : S.habits.map(h => {
+      const color = HABIT_COLORS[h.color] || HABIT_COLORS.emerald;
+      const streak = habitStreak(h);
+      const doneWeek = weekDates.slice(0, tIdx).filter(k => h.log[k]).length;
+      const cells = weekDates.map((k, i) => {
+        const isDone = !!h.log[k];
+        const future = i+1 > tIdx;
+        const cls = 'day-cell' + (isDone ? ' done' : '') + (future ? ' future' : '') + (i+1 === tIdx && !isDone ? ' today' : '');
+        const style = isDone ? 'background:' + color + ';color:#fff' : '';
+        return '<button class="' + cls + '" style="' + style + '" data-action="hb-toggle" data-id="' + h.id + '" data-key="' + k + '" data-allowed="' + (future ? 0 : 1) + '" aria-label="' + DAY_NAMES[i] + ': ' + (isDone ? 'виконано' : 'не виконано') + '">' +
+          '<span>' + DAY_NAMES[i] + '</span><span style="font-size:11px">' + (isDone ? '✓' : future ? '' : '·') + '</span></button>';
+      }).join('');
+      return '<div class="card" style="padding:14px">' +
+        '<div style="display:flex;align-items:center;gap:12px">' +
+        '<div class="habit-icon">' + icon(h.icon, 16) + '</div>' +
+        '<div style="min-width:0;flex:1"><p style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(h.name) + '</p>' +
+        '<p class="muted" style="font-size:12px">' + doneWeek + ' із ' + tIdx + ' ' + plural(tIdx,'дня','днів','днів') + ' цього тижня</p></div>' +
+        '<span class="streak' + (streak ? '' : ' zero') + '">' + (streak ? icon('flame', 14) : '') + streak + '</span>' +
+        '<button class="icon-btn danger no-print" data-action="hb-del" data-id="' + h.id + '" aria-label="Видалити звичку">' + icon('trash', 14) + '</button></div>' +
+        '<div class="week-grid">' + cells + '</div></div>';
+    }).join('');
+}
+function openHabitModal(){
+  S.hbIcon = 'droplet'; S.hbColor = 'emerald';
+  $('#hb-name').value = '';
+  $('#habit-error').style.display = 'none';
+  $('#hb-icons').innerHTML = HABIT_ICONS.map(ic =>
+    '<button data-action="hb-icon" data-icon="' + ic + '"' + (ic === S.hbIcon ? ' class="active"' : '') + '>' + icon(ic, 15) + '</button>').join('');
+  $('#hb-colors').innerHTML = Object.keys(HABIT_COLORS).map(c =>
+    '<button data-action="hb-color" data-color="' + c + '" style="background:' + HABIT_COLORS[c] + '"' + (c === S.hbColor ? ' class="active"' : '') + ' aria-label="' + c + '"></button>').join('');
+  $('#habit-modal').classList.add('open');
+  $('#hb-name').focus();
+}
+
+/* ================= Модалки, меню даних ================= */
+let confirmCb = null;
+function closeModal(id){ $('#' + id).classList.remove('open'); }
+function confirmBox(title, desc, cb){
+  $('#confirm-title').textContent = title;
+  $('#confirm-desc').textContent = desc;
+  confirmCb = cb;
+  $('#confirm-modal').classList.add('open');
+}
+let menuTarget = null; // 'side' | 'mobile' | null
+function menuHtml(id, upward){
+  return '<div id="' + id + '" style="display:none;position:absolute;' + (upward ? 'bottom:calc(100% + 6px);' : 'top:calc(100% + 6px);') +
+    'left:0;min-width:200px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px;z-index:70;box-shadow:0 8px 24px rgba(0,0,0,.15)">' +
+    '<div class="group-head" style="border:none;background:none;padding:6px 10px 4px">localStorage</div>' +
+    '<button class="nav-btn" data-action="export" style="gap:8px">' + icon('download', 15) + ' Експорт (JSON)</button>' +
+    '<button class="nav-btn" data-action="import" style="gap:8px">' + icon('upload', 15) + ' Імпорт (JSON)</button>' +
+    '<div style="border-top:1px solid var(--border);margin:4px 0"></div>' +
+    '<button class="nav-btn" data-action="reset" style="gap:8px">' + icon('rotate', 15) + ' Скинути демо-дані</button></div>';
+}
+function closeMenus(){ menuTarget = null; const s = $('#menu-side'), m = $('#menu-mobile'); if (s) s.style.display = 'none'; if (m) m.style.display = 'none'; }
+function toggleMenu(which){
+  const next = menuTarget === which ? null : which;
+  closeMenus();
+  menuTarget = next;
+  if (menuTarget) { const el = $('#menu-' + menuTarget); if (el) el.style.display = 'block'; }
+}
+function buildMenu(){
+  $('#data-side').style.position = 'relative';
+  $('#data-side').innerHTML = icon('menu', 14) + ' Дані' + menuHtml('menu-side', true);
+  const dm = $('#data-m');
+  const wrap = document.createElement('span');
+  wrap.style.position = 'relative';
+  wrap.style.display = 'inline-flex';
+  dm.parentNode.insertBefore(wrap, dm);
+  wrap.appendChild(dm);
+  dm.insertAdjacentHTML('afterend', menuHtml('menu-mobile', false));
+  dm.innerHTML = icon('menu', 17);
+}
+function exportData(){
+  const payload = {app:'StudyFlow', exported: dateKey()};
+  Object.keys(KEY).forEach(k => { payload[KEY[k]] = S[k]; });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'studyflow-backup-' + dateKey() + '.json'; a.click();
+  URL.revokeObjectURL(url);
+  toast('Файл збережено');
+}
+function importData(file){
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const data = JSON.parse(String(r.result));
+      const keys = Object.values(KEY);
+      if (!keys.some(k => k in data)) { confirmBox('Імпорт не вдався', 'У файлі немає даних StudyFlow', null); return; }
+      if (Array.isArray(data[KEY.lessons])) { S.lessons = data[KEY.lessons]; save(KEY.lessons, S.lessons); }
+      if (Array.isArray(data[KEY.todos])) { S.todos = data[KEY.todos]; save(KEY.todos, S.todos); }
+      if (data[KEY.pomo] && typeof data[KEY.pomo] === 'object') { S.pomo = data[KEY.pomo]; save(KEY.pomo, S.pomo); }
+      if (Array.isArray(data[KEY.decks])) { S.decks = data[KEY.decks]; save(KEY.decks, S.decks); }
+      if (Array.isArray(data[KEY.habits])) { S.habits = data[KEY.habits]; save(KEY.habits, S.habits); }
+      renderAll();
+      toast('Дані імпортовано');
+    } catch(e) { confirmBox('Імпорт не вдався', 'Файл пошкоджений або не JSON', null); }
+  };
+  r.readAsText(file);
+}
+function resetAll(){
+  S.lessons = JSON.parse(JSON.stringify(SEED.lessons));
+  S.todos = JSON.parse(JSON.stringify(SEED.todos));
+  S.pomo = JSON.parse(JSON.stringify(SEED.pomo));
+  S.decks = JSON.parse(JSON.stringify(SEED.decks));
+  S.habits = JSON.parse(JSON.stringify(SEED.habits));
+  Object.keys(KEY).forEach(k => save(KEY[k], S[k]));
+  renderAll();
+  toast('Дані скинуто');
+}
+
+/* ================= Події ================= */
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-tab],[data-action],[data-day],[data-filter],[data-close],#pomo-modes button');
+  if (menuTarget && !e.target.closest('#menu-side,#menu-mobile,#data-side,#data-m')) closeMenus();
+
+  if (!t) return;
+
+  if (t.dataset.tab !== undefined && t.dataset.tab) { setTab(t.dataset.tab); return; }
+  if (t.dataset.close) { closeModal(t.dataset.close); return; }
+  if (t.closest('#pomo-modes')) { switchMode(t.dataset.mode); return; }
+
+  switch (t.dataset.action) {
+    case undefined: break;
+    case 'export': closeMenus(); exportData(); return;
+    case 'import': {
+      closeMenus();
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'application/json,.json';
+      inp.onchange = () => { if (inp.files[0]) importData(inp.files[0]); };
+      inp.click();
+      return;
+    }
+    case 'reset': closeMenus(); confirmBox('Скинути дані?', 'Розклад, завдання, картки та звички повернуться до демо-стану.', resetAll); return;
+    case 'lesson-add': openLessonModal(null); return;
+    case 'lesson-edit': openLessonModal(S.lessons.find(l => l.id === t.dataset.id)); return;
+    case 'lesson-del': {
+      const l = S.lessons.find(x => x.id === t.dataset.id);
+      confirmBox('Видалити пару?', '«' + (l ? l.subject : '') + '» зникне з розкладу.', () => {
+        S.lessons = S.lessons.filter(x => x.id !== t.dataset.id);
+        save(KEY.lessons, S.lessons); renderSchedule();
+      });
+      return;
+    }
+    case 'todo-toggle': {
+      const todo = S.todos.find(x => x.id === t.dataset.id);
+      if (todo) { todo.done = !todo.done; save(KEY.todos, S.todos); renderTodo(); }
+      return;
+    }
+    case 'todo-del': S.todos = S.todos.filter(x => x.id !== t.dataset.id); save(KEY.todos, S.todos); renderTodo(); return;
+    case 'fc-new': {
+      const box = $('#fc-new-box');
+      if (box.innerHTML) { box.innerHTML = ''; return; }
+      box.innerHTML = '<div class="card" style="padding:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">' +
+        '<input class="input" id="fc-deck-name" placeholder="Назва колоди…" style="flex:1;min-width:160px">' +
+        '<button class="btn sm" data-action="fc-create">Створити</button>' +
+        '<button class="btn outline sm" data-action="fc-cancel-new">Скасувати</button></div>';
+      $('#fc-deck-name').focus();
+      return;
+    }
+    case 'fc-cancel-new': $('#fc-new-box').innerHTML = ''; return;
+    case 'fc-create': {
+      const name = $('#fc-deck-name').value.trim();
+      if (!name) return;
+      const deck = {id: uid(), name, cards: []};
+      S.decks.push(deck); saveDecks();
+      S.fc.view = 'edit'; S.fc.deckId = deck.id; S.fc.front = ''; S.fc.back = ''; S.fc.cardEdit = null;
+      renderFC();
+      return;
+    }
+    case 'fc-study': fcStartStudy(S.decks.find(d => d.id === t.dataset.id)); return;
+    case 'fc-edit': {
+      const d = S.decks.find(x => x.id === t.dataset.id);
+      S.fc.view = 'edit'; S.fc.deckId = d.id; S.fc.front = ''; S.fc.back = ''; S.fc.cardEdit = null;
+      renderFC();
+      return;
+    }
+    case 'fc-del': {
+      const d = S.decks.find(x => x.id === t.dataset.id);
+      confirmBox('Видалити колоду?', '«' + (d ? d.name : '') + '» та всі її картки зникнуть.', () => {
+        S.decks = S.decks.filter(x => x.id !== t.dataset.id); saveDecks();
+        if (S.fc.deckId === t.dataset.id) { S.fc.view = 'list'; S.fc.deckId = null; }
+        renderFC();
+      });
+      return;
+    }
+    case 'fc-list': S.fc.view = 'list'; renderFC(); return;
+    case 'fc-again': fcStartStudy(fcDeck()); return;
+    case 'fc-flip': S.fc.flipped = !S.fc.flipped; renderFC(); return;
+    case 'fc-answer': fcAnswer(t.dataset.know === '1'); return;
+    case 'fc-card-save': fcSaveCard(); return;
+    case 'fc-card-cancel': S.fc.cardEdit = null; S.fc.front = ''; S.fc.back = ''; renderFC(); return;
+    case 'fc-card-edit': {
+      const deck = fcDeck();
+      const c = deck.cards.find(x => x.id === t.dataset.id);
+      S.fc.cardEdit = c.id; S.fc.front = c.front; S.fc.back = c.back;
+      renderFC();
+      return;
+    }
+    case 'fc-card-del': {
+      const deck = fcDeck();
+      deck.cards = deck.cards.filter(c => c.id !== t.dataset.id);
+      saveDecks(); renderFC();
+      return;
+    }
+    case 'hb-add': openHabitModal(); return;
+    case 'hb-icon': {
+      S.hbIcon = t.dataset.icon;
+      $$('#hb-icons button').forEach(b => b.classList.toggle('active', b.dataset.icon === S.hbIcon));
+      return;
+    }
+    case 'hb-color': {
+      S.hbColor = t.dataset.color;
+      $$('#hb-colors button').forEach(b => b.classList.toggle('active', b.dataset.color === S.hbColor));
+      return;
+    }
+    case 'hb-del': {
+      const h = S.habits.find(x => x.id === t.dataset.id);
+      confirmBox('Видалити звичку?', '«' + (h ? h.name : '') + '» та історія відміток зникнуть.', () => {
+        S.habits = S.habits.filter(x => x.id !== t.dataset.id);
+        save(KEY.habits, S.habits); renderHabits();
+      });
+      return;
+    }
+  }
+
+  if (t.dataset.day) { S.day = Number(t.dataset.day); renderSchedule(); return; }
+  if (t.dataset.filter) { S.filter = t.dataset.filter; renderTodo(); return; }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { $$('.modal-back.open').forEach(m => m.classList.remove('open')); closeMenus(); }
+  if (S.tab === 'flashcards' && S.fc.view === 'study' && S.fc.queue.length) {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      S.fc.flipped = !S.fc.flipped; renderFC();
+    } else if (S.fc.flipped && e.key === '1') { fcAnswer(false); }
+    else if (S.fc.flipped && e.key === '2') { fcAnswer(true); }
+  }
+  if (e.key === 'Enter' && document.activeElement === $('#todo-text')) { e.preventDefault(); addTodo(); }
+  if (e.key === 'Enter' && document.activeElement === $('#ls-subject')) { e.preventDefault(); saveLesson(); }
+  if (e.key === 'Enter' && document.activeElement === $('#hb-name')) { e.preventDefault(); saveHabitFromModal(); }
+});
+
+function saveHabitFromModal(){
+  const name = $('#hb-name').value.trim();
+  const err = $('#habit-error');
+  if (!name) { err.textContent = 'Вкажи назву'; err.style.display = ''; return; }
+  S.habits.push({id: uid(), name, icon: S.hbIcon, color: S.hbColor, log: {}});
+  save(KEY.habits, S.habits);
+  closeModal('habit-modal');
+  renderHabits();
+  toast('Звичку додано');
+}
+
+$('#confirm-yes').addEventListener('click', () => { if (confirmCb) confirmCb(); confirmCb = null; closeModal('confirm-modal'); });
+$('#lesson-save').addEventListener('click', saveLesson);
+$('#habit-save').addEventListener('click', saveHabitFromModal);
+$('#todo-add-btn').addEventListener('click', addTodo);
+$('#print-btn').addEventListener('click', () => window.print());
+$('#add-lesson-btn').addEventListener('click', () => openLessonModal(null));
+$('#add-habit-btn').addEventListener('click', openHabitModal);
+$('#data-side').addEventListener('click', (e) => { if (!e.target.closest('#menu-side')) toggleMenu('side'); });
+$('#data-m').addEventListener('click', (e) => { if (!e.target.closest('#menu-mobile')) toggleMenu('mobile'); });
+$('#theme-side').addEventListener('click', toggleTheme);
+$('#theme-m').addEventListener('click', toggleTheme);
+$('#pomo-start').addEventListener('click', () => {
+  if (S.pom.running) { S.pom.running = false; S.pom.endAt = null; renderPomo(); }
+  else {
+    try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch(e){}
+    S.pom.endAt = Date.now() + S.pom.left * 1000;
+    S.pom.running = true; S.pom.finished = null;
+    renderPomo();
+  }
+});
+$('#pomo-reset').addEventListener('click', () => { S.pom.running = false; S.pom.endAt = null; S.pom.left = pomoTotal(); S.pom.finished = null; renderPomo(); });
+$('#pomo-skip').addEventListener('click', () => finishPhase(true));
+$('#pomo-focus-len').addEventListener('change', (e) => { S.pom.focusLen = Number(e.target.value); if (!S.pom.running && S.pom.mode === 'focus') { S.pom.left = S.pom.focusLen * 60; renderPomo(); } });
+$('#pomo-break-len').addEventListener('change', (e) => { S.pom.breakLen = Number(e.target.value); if (!S.pom.running && S.pom.mode === 'break') { S.pom.left = S.pom.breakLen * 60; renderPomo(); } });
+$$('.modal-back').forEach(m => m.addEventListener('click', (e) => { if (e.target === m) m.classList.remove('open'); }));
+window.addEventListener('beforeprint', () => { const pt = $('#print-title'); pt.style.display = 'block'; });
+window.addEventListener('afterprint', () => { $('#print-title').style.display = 'none'; });
+
+/* ================= Годинники та запуск ================= */
+function tickClocks(){
+  const now = new Date();
+  const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  $('#clock-side').textContent = hm;
+  $('#clock-m').textContent = hm;
+  if (S.tab === 'home') renderHome();
+}
+setInterval(tickClocks, 1000);
+
+const parity = weekParity();
+$('#parity-side').textContent = parity || 'студент';
+$('#parity-m').textContent = parity || 'студент';
+$('#parity-home').textContent = parity || '';
+$('#ls-day').innerHTML = DAY_NAMES.map((n, i) => '<option value="' + (i+1) + '">' + DAY_FULL[i] + '</option>').join('');
+$('#brand-icon').innerHTML = icon('grad', 17);
+$('#brand-icon-m').innerHTML = icon('grad', 15);
+
+buildNav();
+buildMenu();
+applyTheme();
+setTab('home');
+tickClocks();
+</script>
+</body>
+</html>
